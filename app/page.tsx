@@ -29,6 +29,7 @@ const roles: { name: Role; short: string; tone: string }[] = [
 
 const months = ["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"];
 const categories: Task["category"][] = ["Årsmöte", "Ekonomi", "Styrelse", "Medlemmar", "Utbildning", "Kommunikation", "Omvärld"];
+const years = [2024, 2025, 2026, 2027, 2028, 2029];
 
 const tasks: Task[] = [
   { id: "jan-st", title: "SOF:s ST-skola", month: 0, day: 18, role: "Utbildningsansvarig", category: "Utbildning", description: "Följ upp handkirurgins del i ST-skolan och stäm av med kursledning och studierektorer.", checklist: ["Bekräfta kontaktperson", "Stäm av innehåll", "Samla återkoppling"] },
@@ -71,6 +72,7 @@ const initialStatuses = Object.fromEntries(tasks.map((task, index) => [task.id, 
 
 export default function Home() {
   const [role, setRole] = useState<Role>("Alla");
+  const [year, setYear] = useState(2026);
   const [month, setMonth] = useState<number | null>(7);
   const [statuses, setStatuses] = useState<Record<string, Status>>(initialStatuses);
   const [selected, setSelected] = useState<Task | null>(null);
@@ -104,6 +106,7 @@ export default function Home() {
   const progress = roleTasks.length ? Math.round(done / roleTasks.length * 100) : 0;
   const nextMeeting = allTasks.find(task => task.meeting && task.month >= 7) || allTasks.find(task => task.meeting);
   const activeRoleColor = role === "Alla" ? "#e95d3f" : roles.find(item => item.name === role)?.tone || "#e95d3f";
+  const yearIndex = years.indexOf(year);
 
   function cycle(task: Task) {
     const next: Record<Status, Status> = { "Att göra": "Pågår", "Pågår": "Klart", "Klart": "Att göra" };
@@ -150,7 +153,7 @@ export default function Home() {
       {view === "Årshjul" && <>
         <section className="hero-grid">
           <div className="intro">
-            <p className="eyebrow">VERKSAMHETSÅR 2026–2027</p>
+            <p className="eyebrow">VERKSAMHETSÅR {year}</p>
             <h1>Föreningens arbete,<br/><em>i rätt tid.</em></h1>
             <p className="lede">Ett levande årshjul för Svensk Handkirurgisk Förening. Se vad som är på gång, vem som äger frågan och vad som behöver bli klart härnäst.</p>
             <div className="today-card">
@@ -161,18 +164,32 @@ export default function Home() {
           </div>
 
           <div className="wheel-wrap">
+            <div className="grand-wheel-arc"/><div className="grand-spoke left"/><div className="grand-spoke right"/>
             <div className="orbit one" /><div className="orbit two" /><div className="orbit three" />
-            <div className={`wheel ${role !== "Alla" ? "role-filtered" : ""}`} style={{ "--wheel-role-color": activeRoleColor } as React.CSSProperties} aria-label="Interaktivt årshjul">
-              <div className="wheel-core"><img src="/guldlogo.png" alt="Svensk Handkirurgisk Förening" /></div>
-              {months.map((name, index) => {
-                const angle = index * 30 - 90;
-                const count = allTasks.filter(task => task.month === index && (role === "Alla" || task.role === role)).length;
-                return <button key={name} className={`month-node ${month === index ? "active" : ""}`} style={{ "--angle": `${angle}deg` } as React.CSSProperties} onClick={() => setMonth(month === index ? null : index)} aria-label={`${name}, ${count} aktiviteter`}>
-                  <span>{name.slice(0,3).toUpperCase()}</span>{count > 0 && <i>{count}</i>}
-                </button>;
+            <div className="year-carousel" aria-live="polite">
+              {years.map((wheelYear, index) => {
+                const offset = index - yearIndex;
+                if (Math.abs(offset) > 1) return null;
+                const isCurrent = offset === 0;
+                return <div key={wheelYear} className={`year-wheel-slot offset-${offset < 0 ? "previous" : offset > 0 ? "next" : "current"}`} aria-hidden={!isCurrent}>
+                  <div className={`wheel ${role !== "Alla" ? "role-filtered" : ""}`} style={{ "--wheel-role-color": activeRoleColor } as React.CSSProperties} aria-label={`${wheelYear} års interaktiva årshjul`}>
+                    <div className="wheel-core"><img src="/guldlogo.png" alt={isCurrent ? "Svensk Handkirurgisk Förening" : ""} /></div>
+                    {months.map((name, monthIndex) => {
+                      const angle = monthIndex * 30 - 90;
+                      const count = allTasks.filter(task => task.month === monthIndex && (role === "Alla" || task.role === role)).length;
+                      return <button key={name} tabIndex={isCurrent ? 0 : -1} disabled={!isCurrent} className={`month-node ${isCurrent && month === monthIndex ? "active" : ""}`} style={{ "--angle": `${angle}deg` } as React.CSSProperties} onClick={() => setMonth(month === monthIndex ? null : monthIndex)} aria-label={`${name} ${wheelYear}, ${count} aktiviteter`}>
+                        <span>{name.slice(0,3).toUpperCase()}</span>{count > 0 && <i>{count}</i>}
+                      </button>;
+                    })}
+                  </div>
+                </div>;
               })}
             </div>
-            <div className="wheel-note"><span>↗</span><p><b>ROTATION</b>Klicka på en månad för att fokusera.</p></div>
+            <div className="year-switcher">
+              <button disabled={yearIndex === 0} onClick={() => setYear(years[yearIndex - 1])} aria-label="Visa föregående år">←</button>
+              <b>{year}</b>
+              <button disabled={yearIndex === years.length - 1} onClick={() => setYear(years[yearIndex + 1])} aria-label="Visa nästa år">→</button>
+            </div>
           </div>
 
           <aside className="pulse-panel">
