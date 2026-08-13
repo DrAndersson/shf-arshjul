@@ -28,6 +28,7 @@ const roles: { name: Role; short: string; tone: string }[] = [
 ];
 
 const months = ["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"];
+const categories: Task["category"][] = ["Årsmöte", "Ekonomi", "Styrelse", "Medlemmar", "Utbildning", "Kommunikation", "Omvärld"];
 
 const tasks: Task[] = [
   { id: "jan-st", title: "SOF:s ST-skola", month: 0, day: 18, role: "Utbildningsansvarig", category: "Utbildning", description: "Följ upp handkirurgins del i ST-skolan och stäm av med kursledning och studierektorer.", checklist: ["Bekräfta kontaktperson", "Stäm av innehåll", "Samla återkoppling"] },
@@ -73,9 +74,11 @@ export default function Home() {
   const [month, setMonth] = useState<number | null>(7);
   const [statuses, setStatuses] = useState<Record<string, Status>>(initialStatuses);
   const [selected, setSelected] = useState<Task | null>(null);
+  const [editing, setEditing] = useState(false);
   const [view, setView] = useState<"Årshjul" | "Aktiviteter" | "Berättelse">("Årshjul");
   const [showAdd, setShowAdd] = useState(false);
   const [customTasks, setCustomTasks] = useState<Task[]>([]);
+  const [taskOverrides, setTaskOverrides] = useState<Record<string, Partial<Task>>>({});
   const [toast, setToast] = useState("");
 
   useEffect(() => {
@@ -85,15 +88,16 @@ export default function Home() {
         const data = JSON.parse(saved);
         setStatuses({ ...initialStatuses, ...(data.statuses || {}) });
         setCustomTasks(data.customTasks || []);
+        setTaskOverrides(data.taskOverrides || {});
       }
     } catch { /* börja med mallens data */ }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("shf-arshjul-state", JSON.stringify({ statuses, customTasks }));
-  }, [statuses, customTasks]);
+    localStorage.setItem("shf-arshjul-state", JSON.stringify({ statuses, customTasks, taskOverrides }));
+  }, [statuses, customTasks, taskOverrides]);
 
-  const allTasks = useMemo(() => [...tasks, ...customTasks], [customTasks]);
+  const allTasks = useMemo(() => [...tasks, ...customTasks].map(task => ({ ...task, ...(taskOverrides[task.id] || {}) })), [customTasks, taskOverrides]);
   const visible = useMemo(() => allTasks.filter(task => (role === "Alla" || task.role === role) && (month === null || task.month === month)), [allTasks, role, month]);
   const roleTasks = allTasks.filter(task => role === "Alla" || task.role === role);
   const done = roleTasks.filter(task => statuses[task.id] === "Klart").length;
@@ -108,6 +112,11 @@ export default function Home() {
   function announce(message: string) {
     setToast(message);
     window.setTimeout(() => setToast(""), 2400);
+  }
+
+  function openTask(task: Task) {
+    setEditing(false);
+    setSelected(task);
   }
 
   return (
@@ -169,7 +178,7 @@ export default function Home() {
             <div className="pulse-head"><span className="live-dot" /> <b>STYRELSENS PULS</b><button onClick={() => setView("Aktiviteter")}>···</button></div>
             <div className="pulse-score"><div className="ring" style={{ "--score": "76%" } as React.CSSProperties}><b>76</b><span>/100</span></div><p><strong>God fart</strong><small>Tre saker behöver er uppmärksamhet före nästa möte.</small></p></div>
             <div className="pulse-stats"><div><b>{allTasks.filter(t => statuses[t.id] === "Pågår").length}</b><span>Pågår</span></div><div><b>{allTasks.filter(t => statuses[t.id] === "Klart").length}</b><span>Klart</span></div><div><b>{allTasks.filter(t => t.month === 7 && statuses[t.id] !== "Klart").length}</b><span>I augusti</span></div></div>
-            {nextMeeting && <button className="meeting" onClick={() => setSelected(nextMeeting)}><span>NÄSTA GEMENSAMMA MÖTE</span><b>{nextMeeting.title}</b><small>{nextMeeting.day} {months[nextMeeting.month].toLowerCase()} · Sigtuna</small><i>→</i></button>}
+            {nextMeeting && <button className="meeting" onClick={() => openTask(nextMeeting)}><span>NÄSTA GEMENSAMMA MÖTE</span><b>{nextMeeting.title}</b><small>{nextMeeting.day} {months[nextMeeting.month].toLowerCase()} · Sigtuna</small><i>→</i></button>}
             <div className="micro-story"><span>NYTT I BERÄTTELSEN</span><p>Årsmötesprogrammet har gått från planering till genomförande.</p><button onClick={() => setView("Berättelse")}>Läs berättelsen →</button></div>
           </aside>
         </section>
@@ -192,7 +201,7 @@ export default function Home() {
             return <article className={`task-card status-${status.replace(" ", "-").toLowerCase()}`} key={task.id}>
               <button className="check" aria-label={`Ändra status för ${task.title}`} onClick={() => cycle(task)}>{status === "Klart" ? "✓" : status === "Pågår" ? "–" : ""}</button>
               <div className="task-date"><b>{String(task.day || 1).padStart(2,"0")}</b><span>{months[task.month].slice(0,3).toUpperCase()}</span></div>
-              <div className="task-copy"><div><span>{task.category}</span><small>{task.role}</small></div><h3>{task.title}</h3><p>{task.description}</p><button onClick={() => setSelected(task)}>Öppna arbetskort <span>→</span></button></div>
+              <div className="task-copy"><div><span>{task.category}</span><small>{task.role}</small></div><h3>{task.title}</h3><p>{task.description}</p><button onClick={() => openTask(task)}>Öppna arbetskort <span>→</span></button></div>
               <div className={`status-pill ${status === "Klart" ? "done" : status === "Pågår" ? "doing" : "todo"}`}>{status}</div>
             </article>;
           }) : <div className="empty"><span>○</span><h3>Inga aktiviteter här ännu</h3><p>Välj en annan månad eller lägg till en ny punkt för rollen.</p><button className="add-button" onClick={() => setShowAdd(true)}>＋ Lägg till aktivitet</button></div>}
@@ -214,9 +223,38 @@ export default function Home() {
 
       <footer><div className="brand footer-brand"><span className="brandmark"><i/><i/><i/></span><span><b>SHF</b><small>SVENSK HANDKIRURGISK FÖRENING</small></span></div><p>Årshjulet är byggt för kontinuitet – roller består när personer byts ut.</p><a href="https://slf.se/svensk-handkirurgisk-forening/" target="_blank" rel="noreferrer">Till föreningens webbplats ↗</a></footer>
 
-      {selected && <div className="modal-backdrop" onMouseDown={() => setSelected(null)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={e => e.stopPropagation()}>
-        <button className="modal-close" onClick={() => setSelected(null)} aria-label="Stäng">×</button><p className="eyebrow">{months[selected.month].toUpperCase()} · {selected.category.toUpperCase()}</p><h2 id="modal-title">{selected.title}</h2><p className="modal-lede">{selected.description}</p><div className="owner"><span>{roles.find(r => r.name === selected.role)?.short}</span><p><small>ANSVARIG ROLL</small><b>{selected.role}</b></p><button onClick={() => { setRole(selected.role); setSelected(null); }}>Visa roll →</button></div><h3>Checklista</h3><div className="checklist">{selected.checklist.map((item, index) => <label key={item}><input type="checkbox" defaultChecked={statuses[selected.id] === "Klart"}/><span>{item}</span><small>0{index+1}</small></label>)}</div><div className="modal-actions"><button onClick={() => { cycle(selected); announce("Statusen uppdaterades."); }}>{statuses[selected.id] || "Att göra"} · ändra status</button><button className="primary" onClick={() => setSelected(null)}>Spara & stäng</button></div>
-      </section></div>}
+      {selected && <div className="modal-backdrop" onMouseDown={() => { setSelected(null); setEditing(false); }}>
+        {editing ? <form className="modal edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-title" onMouseDown={e => e.stopPropagation()} onSubmit={event => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          const updated: Task = {
+            ...selected,
+            title: String(data.get("title")).trim(),
+            month: Number(data.get("month")),
+            day: Number(data.get("day")) || 1,
+            role: data.get("role") as Exclude<Role, "Alla">,
+            category: data.get("category") as Task["category"],
+            description: String(data.get("description")).trim(),
+            checklist: String(data.get("checklist")).split("\n").map(item => item.trim()).filter(Boolean),
+          };
+          setTaskOverrides(current => ({ ...current, [updated.id]: updated }));
+          setSelected(updated);
+          setMonth(updated.month);
+          setEditing(false);
+          announce("Arbetskortet har uppdaterats.");
+        }}>
+          <button type="button" className="modal-close" onClick={() => setEditing(false)} aria-label="Avbryt redigering">×</button>
+          <p className="eyebrow">REDIGERA ARBETSKORT</p><h2 id="edit-title">Ändra innehåll</h2>
+          <label>Rubrik<input name="title" required defaultValue={selected.title}/></label>
+          <div className="form-row"><label>Månad<select name="month" defaultValue={selected.month}>{months.map((item,index) => <option value={index} key={item}>{item}</option>)}</select></label><label>Dag<input name="day" type="number" min="1" max="31" defaultValue={selected.day || 1}/></label></div>
+          <div className="form-row"><label>Ansvarig roll<select name="role" defaultValue={selected.role}>{roles.slice(1).map(item => <option key={item.name}>{item.name}</option>)}</select></label><label>Kategori<select name="category" defaultValue={selected.category}>{categories.map(item => <option key={item}>{item}</option>)}</select></label></div>
+          <label>Beskrivning<textarea name="description" required rows={4} defaultValue={selected.description}/></label>
+          <label>Checklista <small>En punkt per rad</small><textarea name="checklist" rows={5} defaultValue={selected.checklist.join("\n")}/></label>
+          <div className="modal-actions"><button type="button" onClick={() => setEditing(false)}>Avbryt</button><button className="primary" type="submit">Spara ändringar</button></div>
+        </form> : <section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={e => e.stopPropagation()}>
+          <button className="modal-close" onClick={() => setSelected(null)} aria-label="Stäng">×</button><p className="eyebrow">{months[selected.month].toUpperCase()} · {selected.category.toUpperCase()}</p><h2 id="modal-title">{selected.title}</h2><p className="modal-lede">{selected.description}</p><div className="owner"><span>{roles.find(r => r.name === selected.role)?.short}</span><p><small>ANSVARIG ROLL</small><b>{selected.role}</b></p><button onClick={() => { setRole(selected.role); setSelected(null); }}>Visa roll →</button></div><h3>Checklista</h3><div className="checklist">{selected.checklist.map((item, index) => <label key={`${item}-${index}`}><input type="checkbox" defaultChecked={statuses[selected.id] === "Klart"}/><span>{item}</span><small>0{index+1}</small></label>)}</div><div className="modal-actions three"><button onClick={() => { cycle(selected); announce("Statusen uppdaterades."); }}>{statuses[selected.id] || "Att göra"} · ändra status</button><button onClick={() => setEditing(true)}>✎ Redigera kort</button><button className="primary" onClick={() => setSelected(null)}>Stäng</button></div>
+        </section>}
+      </div>}
 
       {showAdd && <div className="modal-backdrop" onMouseDown={() => setShowAdd(false)}><form className="modal add-modal" onMouseDown={e => e.stopPropagation()} onSubmit={event => {
         event.preventDefault(); const data = new FormData(event.currentTarget); const id = `custom-${Date.now()}`; const newTask: Task = { id, title: String(data.get("title")), month: Number(data.get("month")), day: Number(data.get("day")) || 1, role: data.get("role") as Exclude<Role,"Alla">, category: "Styrelse", description: String(data.get("description")) || "Ny aktivitet för styrelsens årshjul.", checklist: ["Förbered", "Genomför", "Följ upp"] }; setCustomTasks(current => [...current, newTask]); setStatuses(current => ({...current, [id]: "Att göra"})); setShowAdd(false); setMonth(newTask.month); setRole(newTask.role); announce("Aktiviteten har lagts till i årshjulet.");
