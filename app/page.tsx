@@ -162,7 +162,7 @@ export default function Home() {
           <div className="wheel-wrap">
             <div className="orbit one" /><div className="orbit two" /><div className="orbit three" />
             <div className="wheel" aria-label="Interaktivt årshjul">
-              <div className="wheel-core"><span>SHF</span><b>2026</b><small>{role === "Alla" ? "ALLA ROLLER" : role.toUpperCase()}</small></div>
+              <div className="wheel-core"><img src="/guldlogo.png" alt="Svensk Handkirurgisk Förening" /></div>
               {months.map((name, index) => {
                 const angle = index * 30 - 90;
                 const count = allTasks.filter(task => task.month === index && (role === "Alla" || task.role === role)).length;
