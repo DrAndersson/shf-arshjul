@@ -103,6 +103,7 @@ export default function Home() {
   const done = roleTasks.filter(task => statuses[task.id] === "Klart").length;
   const progress = roleTasks.length ? Math.round(done / roleTasks.length * 100) : 0;
   const nextMeeting = allTasks.find(task => task.meeting && task.month >= 7) || allTasks.find(task => task.meeting);
+  const activeRoleColor = role === "Alla" ? "#e95d3f" : roles.find(item => item.name === role)?.tone || "#e95d3f";
 
   function cycle(task: Task) {
     const next: Record<Status, Status> = { "Att göra": "Pågår", "Pågår": "Klart", "Klart": "Att göra" };
@@ -161,7 +162,7 @@ export default function Home() {
 
           <div className="wheel-wrap">
             <div className="orbit one" /><div className="orbit two" /><div className="orbit three" />
-            <div className="wheel" aria-label="Interaktivt årshjul">
+            <div className={`wheel ${role !== "Alla" ? "role-filtered" : ""}`} style={{ "--wheel-role-color": activeRoleColor } as React.CSSProperties} aria-label="Interaktivt årshjul">
               <div className="wheel-core"><img src="/guldlogo.png" alt="Svensk Handkirurgisk Förening" /></div>
               {months.map((name, index) => {
                 const angle = index * 30 - 90;
