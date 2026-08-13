@@ -127,7 +127,7 @@ export default function Home() {
     <main>
       <header className="topbar">
         <button className="brand" aria-label="SHF Årshjul, startsida" onClick={() => { setView("Årshjul"); setMonth(7); }}>
-          <span className="brandmark"><i /><i /><i /></span>
+          <img className="brand-logo" src="/shf-logo-pos.png" alt="" />
           <span><b>SHF</b><small>STYRELSEPORTAL</small></span>
         </button>
         <nav aria-label="Huvudnavigation">
@@ -251,7 +251,7 @@ export default function Home() {
         </div>
       </section>}
 
-      <footer><div className="brand footer-brand"><span className="brandmark"><i/><i/><i/></span><span><b>SHF</b><small>SVENSK HANDKIRURGISK FÖRENING</small></span></div><p>Årshjulet är byggt för kontinuitet – roller består när personer byts ut.</p><div className="footer-links"><a href="/test-visualisering">Test-sida ◉</a><a href="https://slf.se/svensk-handkirurgisk-forening/" target="_blank" rel="noreferrer">Till föreningens webbplats ↗</a></div></footer>
+      <footer><div className="brand footer-brand"><img className="brand-logo" src="/shf-logo-pos.png" alt="" /><span><b>SHF</b><small>SVENSK HANDKIRURGISK FÖRENING</small></span></div><p>Årshjulet är byggt för kontinuitet – roller består när personer byts ut.</p><div className="footer-links"><a href="/test-visualisering">Test-sida ◉</a><a href="https://slf.se/svensk-handkirurgisk-forening/" target="_blank" rel="noreferrer">Till föreningens webbplats ↗</a></div></footer>
 
       {selected && <div className="modal-backdrop" onMouseDown={() => { setSelected(null); setEditing(false); }}>
         {editing ? <form className="modal edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-title" onMouseDown={e => e.stopPropagation()} onSubmit={event => {
