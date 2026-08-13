@@ -164,15 +164,27 @@ export default function Home() {
           </div>
 
           <div className="wheel-wrap">
-            <div className="grand-wheel-arc"/><div className="grand-spoke left"/><div className="grand-spoke right"/>
+            <div
+              className="grand-wheel-structure"
+              style={{ "--grand-rotation": `${(2 - yearIndex) * 38}deg` } as React.CSSProperties}
+              aria-hidden="true"
+            >
+              <div className="grand-wheel-arc" />
+              {[-114, -76, -38, 0, 38, 76, 114].map(angle =>
+                <span key={angle} className="grand-wheel-spoke" style={{ "--spoke-angle": `${angle}deg` } as React.CSSProperties}>
+                  <i />
+                </span>
+              )}
+              <div className="grand-wheel-hub" />
+            </div>
             <div className="orbit one" /><div className="orbit two" /><div className="orbit three" />
-            <div className="year-carousel" aria-live="polite">
+            <div className="year-carousel" style={{ "--carousel-rotation": `${-yearIndex * 38}deg` } as React.CSSProperties} aria-live="polite">
               {years.map((wheelYear, index) => {
                 const offset = index - yearIndex;
                 if (Math.abs(offset) > 1) return null;
                 const isCurrent = offset === 0;
-                return <div key={wheelYear} className={`year-wheel-slot offset-${offset < 0 ? "previous" : offset > 0 ? "next" : "current"}`} aria-hidden={!isCurrent}>
-                  <div className={`wheel ${role !== "Alla" ? "role-filtered" : ""}`} style={{ "--wheel-role-color": activeRoleColor } as React.CSSProperties} aria-label={`${wheelYear} års interaktiva årshjul`}>
+                return <div key={wheelYear} className={`year-wheel-slot offset-${offset < 0 ? "previous" : offset > 0 ? "next" : "current"}`} style={{ "--slot-angle": `${index * 38 - 90}deg` } as React.CSSProperties} aria-hidden={!isCurrent}>
+                  <div className={`wheel ${role !== "Alla" ? "role-filtered" : ""}`} style={{ "--wheel-role-color": activeRoleColor, "--wheel-upright": `${90 - offset * 38}deg` } as React.CSSProperties} aria-label={`${wheelYear} års interaktiva årshjul`}>
                     <div className="wheel-core"><img src="/guldlogo.png" alt={isCurrent ? "Svensk Handkirurgisk Förening" : ""} /></div>
                     {months.map((name, monthIndex) => {
                       const angle = monthIndex * 30 - 90;
