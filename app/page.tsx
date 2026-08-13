@@ -30,6 +30,7 @@ const roles: { name: Role; short: string; tone: string }[] = [
 const months = ["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"];
 const categories: Task["category"][] = ["Årsmöte", "Ekonomi", "Styrelse", "Medlemmar", "Utbildning", "Kommunikation", "Omvärld"];
 const years = [2024, 2025, 2026, 2027, 2028, 2029];
+const operationalYear = new Date().getFullYear();
 
 const tasks: Task[] = [
   { id: "jan-st", title: "SOF:s ST-skola", month: 0, day: 18, role: "Utbildningsansvarig", category: "Utbildning", description: "Följ upp handkirurgins del i ST-skolan och stäm av med kursledning och studierektorer.", checklist: ["Bekräfta kontaktperson", "Stäm av innehåll", "Samla återkoppling"] },
@@ -107,6 +108,8 @@ export default function Home() {
   const nextMeeting = allTasks.find(task => task.meeting && task.month >= 7) || allTasks.find(task => task.meeting);
   const activeRoleColor = role === "Alla" ? "#e95d3f" : roles.find(item => item.name === role)?.tone || "#e95d3f";
   const yearIndex = years.indexOf(year);
+  const yearMode = year === operationalYear ? "current" : year === operationalYear + 1 ? "next" : year < operationalYear ? "archive" : "future";
+  const yearModeLabel = yearMode === "current" ? "NUVARANDE ÅR" : yearMode === "next" ? "NÄSTA VERKSAMHETSÅR" : yearMode === "archive" ? "ARKIVÅR" : "FRAMTIDA ÅR";
 
   function cycle(task: Task) {
     const next: Record<Status, Status> = { "Att göra": "Pågår", "Pågår": "Klart", "Klart": "Att göra" };
@@ -151,7 +154,7 @@ export default function Home() {
       </section>
 
       {view === "Årshjul" && <>
-        <section className="hero-grid">
+        <section className={`hero-grid year-mode-${yearMode}`}>
           <div className="intro">
             <p className="eyebrow">VERKSAMHETSÅR {year}</p>
             <h1>Föreningens arbete,<br/><em>i rätt tid.</em></h1>
@@ -183,6 +186,7 @@ export default function Home() {
                 const offset = index - yearIndex;
                 if (Math.abs(offset) > 1) return null;
                 const isCurrent = offset === 0;
+                const showCounts = wheelYear === operationalYear || wheelYear === operationalYear + 1;
                 return <div key={wheelYear} className={`year-wheel-slot offset-${offset < 0 ? "previous" : offset > 0 ? "next" : "current"}`} style={{ "--slot-angle": `${index * 38 - 90}deg` } as React.CSSProperties} aria-hidden={!isCurrent}>
                   <div className={`wheel ${role !== "Alla" ? "role-filtered" : ""}`} style={{ "--wheel-role-color": activeRoleColor, "--wheel-upright": `${90 - offset * 38}deg` } as React.CSSProperties} aria-label={`${wheelYear} års interaktiva årshjul`}>
                     <div className="wheel-core"><img src="/guldlogo.png" alt={isCurrent ? "Svensk Handkirurgisk Förening" : ""} /></div>
@@ -190,14 +194,15 @@ export default function Home() {
                       const angle = monthIndex * 30 - 90;
                       const count = allTasks.filter(task => task.month === monthIndex && (role === "Alla" || task.role === role)).length;
                       return <button key={name} tabIndex={isCurrent ? 0 : -1} disabled={!isCurrent} className={`month-node ${isCurrent && month === monthIndex ? "active" : ""}`} style={{ "--angle": `${angle}deg` } as React.CSSProperties} onClick={() => setMonth(month === monthIndex ? null : monthIndex)} aria-label={`${name} ${wheelYear}, ${count} aktiviteter`}>
-                        <span>{name.slice(0,3).toUpperCase()}</span>{count > 0 && <i>{count}</i>}
+                        <span>{name.slice(0,3).toUpperCase()}</span>{showCounts && count > 0 && <i>{count}</i>}
                       </button>;
                     })}
                   </div>
                 </div>;
               })}
             </div>
-            <div className="year-switcher">
+            <div className={`year-switcher ${yearMode}`}>
+              <span className="year-mode-label">{yearModeLabel}</span>
               <button disabled={yearIndex === 0} onClick={() => setYear(years[yearIndex - 1])} aria-label="Visa föregående år">←</button>
               <b>{year}</b>
               <button disabled={yearIndex === years.length - 1} onClick={() => setYear(years[yearIndex + 1])} aria-label="Visa nästa år">→</button>
