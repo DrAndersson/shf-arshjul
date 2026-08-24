@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
+const githubPages = process.env.GITHUB_PAGES === "1";
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  basePath: githubPages ? "/shf-arshjul" : "",
+  assetPrefix: githubPages ? "/shf-arshjul" : "",
+  trailingSlash: githubPages,
 };
 
 export default nextConfig;

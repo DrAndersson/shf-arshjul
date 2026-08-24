@@ -32,7 +32,7 @@ export default function TestVisualisering() {
 
   return <main className="test-shell">
     <header className="test-header">
-      <a className="test-back" href="/">← Tillbaka till årshjulet</a>
+      <a className="test-back" href="../">← Tillbaka till årshjulet</a>
       <div><span>SHF LABB / 01</span><b>Testvisualisering</b></div>
       <span className="test-badge"><i/> FRISTÅENDE EXPERIMENT</span>
     </header>
