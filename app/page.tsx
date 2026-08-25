@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 type Role = "Alla" | "Ordförande" | "Vetenskaplig sekreterare" | "Kassör" | "Utbildningsansvarig" | "IT-ansvarig" | "Sekreterare" | "Övrig ledamot";
 type Status = "Att göra" | "Pågår" | "Klart";
@@ -14,6 +15,12 @@ type Task = {
   description: string;
   checklist: string[];
   meeting?: boolean;
+};
+type DatabaseRow = {
+  id: string;
+  task: Task;
+  status: Status;
+  is_custom: boolean;
 };
 
 const roles: { name: Role; short: string; tone: string }[] = [
@@ -83,22 +90,107 @@ export default function Home() {
   const [customTasks, setCustomTasks] = useState<Task[]>([]);
   const [taskOverrides, setTaskOverrides] = useState<Record<string, Partial<Task>>>({});
   const [toast, setToast] = useState("");
+  const [syncReady, setSyncReady] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("shf-arshjul-state");
-      if (saved) {
-        const data = JSON.parse(saved);
-        setStatuses({ ...initialStatuses, ...(data.statuses || {}) });
-        setCustomTasks(data.customTasks || []);
-        setTaskOverrides(data.taskOverrides || {});
+    let active = true;
+
+    function applyRow(row: DatabaseRow) {
+      setStatuses(current => ({ ...current, [row.id]: row.status }));
+      if (row.is_custom) {
+        setCustomTasks(current => {
+          const exists = current.some(item => item.id === row.id);
+          return exists ? current.map(item => item.id === row.id ? row.task : item) : [...current, row.task];
+        });
+      } else {
+        setTaskOverrides(current => ({ ...current, [row.id]: row.task }));
       }
-    } catch { /* börja med mallens data */ }
-  }, []);
+    }
 
-  useEffect(() => {
-    localStorage.setItem("shf-arshjul-state", JSON.stringify({ statuses, customTasks, taskOverrides }));
-  }, [statuses, customTasks, taskOverrides]);
+    async function loadSharedState() {
+      const { data, error } = await supabase.from("year_wheel_items").select("id, task, status, is_custom");
+      if (!active) return;
+      if (error) {
+        console.error(error);
+        announce("Databasen är inte färdigkonfigurerad ännu.");
+        setSyncReady(true);
+        return;
+      }
+
+      let rows = (data || []) as DatabaseRow[];
+      if (rows.length === 0) {
+        try {
+          const saved = localStorage.getItem("shf-arshjul-state");
+          if (saved) {
+            const local = JSON.parse(saved) as {
+              statuses?: Record<string, Status>;
+              customTasks?: Task[];
+              taskOverrides?: Record<string, Partial<Task>>;
+            };
+            const localCustom = local.customTasks || [];
+            const localOverrides = local.taskOverrides || {};
+            const templateRows = tasks
+              .filter(task => local.statuses?.[task.id] || localOverrides[task.id])
+              .map(task => ({
+                id: task.id,
+                task: { ...task, ...(localOverrides[task.id] || {}) },
+                status: local.statuses?.[task.id] || initialStatuses[task.id] || "Att göra",
+                is_custom: false,
+              }));
+            const customRows = localCustom.map(task => ({
+              id: task.id,
+              task,
+              status: local.statuses?.[task.id] || "Att göra",
+              is_custom: true,
+            }));
+            const migrationRows = [...templateRows, ...customRows];
+            if (migrationRows.length) {
+              const { data: migrated, error: migrationError } = await supabase
+                .from("year_wheel_items")
+                .upsert(migrationRows)
+                .select("id, task, status, is_custom");
+              if (migrationError) throw migrationError;
+              rows = (migrated || migrationRows) as DatabaseRow[];
+              localStorage.removeItem("shf-arshjul-state");
+            }
+          }
+        } catch (migrationError) {
+          console.error(migrationError);
+          announce("Lokala ändringar kunde inte flyttas automatiskt.");
+        }
+      }
+
+      rows.forEach(applyRow);
+      setSyncReady(true);
+    }
+
+    void loadSharedState();
+
+    const channel = supabase
+      .channel("year-wheel-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "year_wheel_items" }, payload => applyRow(payload.new as DatabaseRow))
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "year_wheel_items" }, payload => applyRow(payload.new as DatabaseRow))
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "year_wheel_items" }, payload => {
+        const deleted = payload.old as Pick<DatabaseRow, "id">;
+        setCustomTasks(current => current.filter(item => item.id !== deleted.id));
+        setTaskOverrides(current => {
+          const next = { ...current };
+          delete next[deleted.id];
+          return next;
+        });
+        setStatuses(current => {
+          const next = { ...current };
+          delete next[deleted.id];
+          return next;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      active = false;
+      void supabase.removeChannel(channel);
+    };
+  }, []);
 
   const allTasks = useMemo(() => [...tasks, ...customTasks].map(task => ({ ...task, ...(taskOverrides[task.id] || {}) })), [customTasks, taskOverrides]);
   const visible = useMemo(() => allTasks.filter(task => (role === "Alla" || task.role === role) && (month === null || task.month === month)), [allTasks, role, month]);
@@ -111,9 +203,26 @@ export default function Home() {
   const yearMode = year === operationalYear ? "current" : year === operationalYear + 1 ? "next" : year < operationalYear ? "archive" : "future";
   const yearModeLabel = yearMode === "current" ? "NUVARANDE ÅR" : yearMode === "next" ? "NÄSTA VERKSAMHETSÅR" : yearMode === "archive" ? "ARKIVÅR" : "FRAMTIDA ÅR";
 
+  async function saveItem(task: Task, status: Status, isCustom: boolean) {
+    const { error } = await supabase.from("year_wheel_items").upsert({
+      id: task.id,
+      task,
+      status,
+      is_custom: isCustom,
+    });
+    if (error) {
+      console.error(error);
+      announce("Kunde inte spara ändringen online. Försök igen.");
+      return false;
+    }
+    return true;
+  }
+
   function cycle(task: Task) {
     const next: Record<Status, Status> = { "Att göra": "Pågår", "Pågår": "Klart", "Klart": "Att göra" };
-    setStatuses(current => ({ ...current, [task.id]: next[current[task.id] || "Att göra"] }));
+    const nextStatus = next[statuses[task.id] || "Att göra"];
+    setStatuses(current => ({ ...current, [task.id]: nextStatus }));
+    void saveItem(task, nextStatus, customTasks.some(item => item.id === task.id));
   }
 
   function announce(message: string) {
@@ -139,7 +248,7 @@ export default function Home() {
         <div className="header-actions">
           <button className="round" aria-label="Sök" onClick={() => announce("Sökning kan kopplas till alla uppgifter och dokument i nästa version.")}>⌕</button>
           <button className="round notification" aria-label="Notiser" onClick={() => announce("3 punkter behöver uppmärksamhet före nästa styrelsemöte.")}>♢<span>3</span></button>
-          <button className="add-button" onClick={() => setShowAdd(true)}>＋ Lägg till</button>
+          <button className="add-button" disabled={!syncReady} onClick={() => setShowAdd(true)}>＋ Lägg till</button>
         </div>
       </header>
 
@@ -276,7 +385,9 @@ export default function Home() {
           setSelected(updated);
           setMonth(updated.month);
           setEditing(false);
-          announce("Arbetskortet har uppdaterats.");
+          void saveItem(updated, statuses[updated.id] || "Att göra", customTasks.some(item => item.id === updated.id)).then(saved => {
+            if (saved) announce("Arbetskortet har sparats online.");
+          });
         }}>
           <button type="button" className="modal-close" onClick={() => setEditing(false)} aria-label="Avbryt redigering">×</button>
           <p className="eyebrow">REDIGERA ARBETSKORT</p><h2 id="edit-title">Ändra innehåll</h2>
@@ -292,7 +403,7 @@ export default function Home() {
       </div>}
 
       {showAdd && <div className="modal-backdrop" onMouseDown={() => setShowAdd(false)}><form className="modal add-modal" onMouseDown={e => e.stopPropagation()} onSubmit={event => {
-        event.preventDefault(); const data = new FormData(event.currentTarget); const id = `custom-${Date.now()}`; const newTask: Task = { id, title: String(data.get("title")), month: Number(data.get("month")), day: Number(data.get("day")) || 1, role: data.get("role") as Exclude<Role,"Alla">, category: "Styrelse", description: String(data.get("description")) || "Ny aktivitet för styrelsens årshjul.", checklist: ["Förbered", "Genomför", "Följ upp"] }; setCustomTasks(current => [...current, newTask]); setStatuses(current => ({...current, [id]: "Att göra"})); setShowAdd(false); setMonth(newTask.month); setRole(newTask.role); announce("Aktiviteten har lagts till i årshjulet.");
+        event.preventDefault(); const data = new FormData(event.currentTarget); const id = crypto.randomUUID(); const newTask: Task = { id, title: String(data.get("title")), month: Number(data.get("month")), day: Number(data.get("day")) || 1, role: data.get("role") as Exclude<Role,"Alla">, category: "Styrelse", description: String(data.get("description")) || "Ny aktivitet för styrelsens årshjul.", checklist: ["Förbered", "Genomför", "Följ upp"] }; setCustomTasks(current => [...current, newTask]); setStatuses(current => ({...current, [id]: "Att göra"})); setShowAdd(false); setMonth(newTask.month); setRole(newTask.role); void saveItem(newTask, "Att göra", true).then(saved => { if (saved) announce("Aktiviteten har sparats i det gemensamma årshjulet."); });
       }}><button type="button" className="modal-close" onClick={() => setShowAdd(false)}>×</button><p className="eyebrow">NY PUNKT I ÅRSHJULET</p><h2>Lägg till aktivitet</h2><label>Titel<input name="title" required placeholder="Vad behöver göras?" /></label><div className="form-row"><label>Månad<select name="month" defaultValue="7">{months.map((m,i)=><option value={i} key={m}>{m}</option>)}</select></label><label>Dag<input type="number" name="day" min="1" max="31" defaultValue="15"/></label></div><label>Ansvarig roll<select name="role" defaultValue={role === "Alla" ? "Ordförande" : role}>{roles.slice(1).map(r=><option key={r.name}>{r.name}</option>)}</select></label><label>Beskrivning<textarea name="description" placeholder="Syfte, önskat resultat eller viktig bakgrund" rows={3}/></label><button className="primary submit" type="submit">Lägg till i årshjulet</button></form></div>}
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>

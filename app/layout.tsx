@@ -52,7 +52,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AccessGate enabled={githubPages} logoSrc={githubPages ? "/shf-arshjul/shf-logo-pos.png" : "/shf-logo-pos.png"}>
+        <AccessGate logoSrc={githubPages ? "/shf-arshjul/shf-logo-pos.png" : "/shf-logo-pos.png"}>
           {children}
         </AccessGate>
       </body>
