@@ -10,6 +10,13 @@ export default function AccessGate({ children, logoSrc }: { children: ReactNode;
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [needsPassword, setNeedsPassword] = useState(() => typeof window !== "undefined" && (
+    window.location.hash.includes("type=invite") ||
+    window.location.hash.includes("type=recovery") ||
+    new URLSearchParams(window.location.search).get("type") === "invite"
+  ));
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -18,8 +25,9 @@ export default function AccessGate({ children, logoSrc }: { children: ReactNode;
       setAuthenticated(Boolean(data.session));
       setReady(true);
     });
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (active) {
+        if (event === "PASSWORD_RECOVERY") setNeedsPassword(true);
         setAuthenticated(Boolean(session));
         setReady(true);
       }
@@ -43,6 +51,47 @@ export default function AccessGate({ children, logoSrc }: { children: ReactNode;
       setError("Fel e-postadress eller lösenord.");
       setPassword("");
     }
+  }
+
+  async function savePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (newPassword.length < 10) {
+      setError("Lösenordet behöver innehålla minst 10 tecken.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Lösenorden stämmer inte överens.");
+      return;
+    }
+    setSubmitting(true);
+    setError("");
+    const { error: passwordError } = await supabase.auth.updateUser({ password: newPassword });
+    setSubmitting(false);
+    if (passwordError) {
+      setError("Lösenordet kunde inte sparas. Öppna inbjudningslänken igen.");
+      return;
+    }
+    window.history.replaceState({}, document.title, window.location.pathname);
+    setNeedsPassword(false);
+    setNewPassword("");
+    setConfirmPassword("");
+  }
+
+  if (ready && authenticated && needsPassword) {
+    return <main className="login-shell">
+      <div className="login-orbit one"/><div className="login-orbit two"/>
+      <section className="login-panel" aria-labelledby="password-title">
+        <div className="login-brand"><img src={logoSrc} alt="Svensk Handkirurgisk Förening"/><span><b>SHF</b><small>STYRELSEPORTAL</small></span></div>
+        <div className="login-copy"><span>AKTIVERA KONTO</span><h1 id="password-title">Välj ditt<br/><em>lösenord.</em></h1><p>Skapa ett personligt lösenord för framtida inloggningar.</p></div>
+        <form onSubmit={savePassword}>
+          <label><span>Nytt lösenord</span><input type="password" value={newPassword} onChange={event => setNewPassword(event.target.value)} autoComplete="new-password" minLength={10} required/></label>
+          <label><span>Upprepa lösenord</span><input type="password" value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={10} required/></label>
+          {error && <p className="login-error" role="alert">{error}</p>}
+          <button type="submit" disabled={submitting}>{submitting ? "Sparar…" : "Spara och öppna årshjulet"} <i>→</i></button>
+        </form>
+        <small className="login-foot">PERSONLIGT KONTO · SHF</small>
+      </section>
+    </main>;
   }
 
   if (!ready || !authenticated) {
